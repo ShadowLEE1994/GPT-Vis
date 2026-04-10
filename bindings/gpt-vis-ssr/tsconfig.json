@@ -7,6 +7,7 @@
     "esModuleInterop": true,
     "strict": true,
     "skipLibCheck": true,
+    "types": ["node"],
     "declaration": true,
     "resolveJsonModule": true,
     "baseUrl": "./",
@@ -14,6 +15,6 @@
       "@antv/gpt-vis": ["./src/index.ts"]
     }
   },
-  "include": ["./*.?*.ts", "src", "__tests__", "docs"],
+  "include": ["./*.?*.ts", "src", "server", "__tests__", "docs"],
   "exclude": ["node_modules", "dist"]
 }

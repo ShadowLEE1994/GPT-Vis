@@ -18,7 +18,6 @@ import { Pie } from './vis/pie';
 import { Radar } from './vis/radar';
 import { Sankey } from './vis/sankey';
 import { Scatter } from './vis/scatter';
-import { Spreadsheet } from './vis/spreadsheet';
 import { Treemap } from './vis/treemap';
 import { Venn } from './vis/venn';
 import { Violin } from './vis/violin';
@@ -53,7 +52,6 @@ const VIS = {
   venn: Venn,
   waterfall: Waterfall,
   'word-cloud': WordCloud,
-  spreadsheet: Spreadsheet,
 };
 
 /**
@@ -63,6 +61,12 @@ const VIS = {
  */
 export async function render(options: Options): Promise<SSRResult> {
   const { type, ...rest } = options;
+
+  // Delay loading spreadsheet renderer to avoid bringing CSS-only browser assets into Node startup path.
+  if (type === 'spreadsheet') {
+    const { Spreadsheet } = await import('./vis/spreadsheet');
+    return Spreadsheet(rest as any);
+  }
 
   // if theme is rough, use rough canvas plugin, and set theme to default
   if (rest.texture === 'rough' || (rest as any).style?.texture === 'rough') {

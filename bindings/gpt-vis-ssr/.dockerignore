@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+*.log
+__tests__/
+__mocks__/
+public/
+.fatherrc.ts
+jest.config.ts
+jest.setup.js
