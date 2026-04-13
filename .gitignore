@@ -74,7 +74,6 @@ jspm_packages/
 .DS_Store
 .cache
 .idea
-.copilot
 # Build
 dist
 
