@@ -37,12 +37,14 @@
     "@antv/g6-ssr": "^0.1.0",
     "@antv/gpt-vis": "^0.4.0",
     "@antv/s2-ssr": "^0.1.0",
+    "busboy": "^1.6.0",
     "canvas": "^3",
     "dotenv": "^16.6.1",
     "minio": "^8.0.7"
   },
   "devDependencies": {
     "@blazediff/core": "^1.8.0",
+    "@types/busboy": "^1.5.4",
     "@types/jest": "^29.5.14",
     "@types/node": "^22.15.3",
     "@types/pngjs": "^6.0.5",
