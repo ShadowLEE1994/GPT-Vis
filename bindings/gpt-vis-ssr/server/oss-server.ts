@@ -1,10 +1,16 @@
-import { randomUUID } from 'node:crypto';
-import { createServer, IncomingMessage, ServerResponse } from 'node:http';
 import busboy from 'busboy';
 import { config as loadEnv } from 'dotenv';
+import { randomUUID } from 'node:crypto';
+import { createServer, IncomingMessage, ServerResponse } from 'node:http';
 import { render } from '../src';
 import type { Options } from '../src/types';
-import { createOssClient, normalizePrefix, resolveOssConfig, toPublicUrl, uploadObject } from './oss-client';
+import {
+  createOssClient,
+  normalizePrefix,
+  resolveOssConfig,
+  toPublicUrl,
+  uploadObject,
+} from './oss-client';
 
 // 自动加载运行目录下的 .env 文件（文件不存在时静默跳过）
 loadEnv();
@@ -61,8 +67,9 @@ async function readJsonBody(req: IncomingMessage): Promise<RequestPayload> {
     });
 
     req.on('end', () => {
+      let raw = '';
       try {
-        const raw = Buffer.concat(chunks).toString('utf-8').trim();
+        raw = Buffer.concat(chunks).toString('utf-8').trim();
         if (!raw) {
           throw new Error('Request body is empty');
         }
@@ -72,6 +79,7 @@ async function readJsonBody(req: IncomingMessage): Promise<RequestPayload> {
         }
         resolve(json);
       } catch (error) {
+        console.error('[gpt-vis-ssr] readJsonBody failed, raw input:', raw);
         reject(error);
       }
     });
@@ -83,7 +91,10 @@ async function readJsonBody(req: IncomingMessage): Promise<RequestPayload> {
 async function handleUpload(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const contentType = req.headers['content-type'] || '';
   if (!contentType.includes('multipart/form-data')) {
-    sendJson(res, 415, { success: false, errorMessage: 'Content-Type must be multipart/form-data' });
+    sendJson(res, 415, {
+      success: false,
+      errorMessage: 'Content-Type must be multipart/form-data',
+    });
     return;
   }
 
@@ -131,21 +142,35 @@ async function handleUpload(req: IncomingMessage, res: ServerResponse): Promise<
           const safeFilename = rawName.replace(/[^\w.\-]/g, '_');
           // 若文件名无扩展名，尝试从 mimeType 推断
           const mimeToExt: Record<string, string> = {
-            'image/png': '.png', 'image/jpeg': '.jpg', 'image/gif': '.gif',
-            'image/webp': '.webp', 'image/svg+xml': '.svg',
+            'image/png': '.png',
+            'image/jpeg': '.jpg',
+            'image/gif': '.gif',
+            'image/webp': '.webp',
+            'image/svg+xml': '.svg',
             'application/pdf': '.pdf',
             'application/json': '.json',
-            'text/plain': '.txt', 'text/csv': '.csv', 'text/html': '.html',
-            'application/zip': '.zip', 'application/gzip': '.gz',
-            'video/mp4': '.mp4', 'video/webm': '.webm',
-            'audio/mpeg': '.mp3', 'audio/wav': '.wav',
+            'text/plain': '.txt',
+            'text/csv': '.csv',
+            'text/html': '.html',
+            'application/zip': '.zip',
+            'application/gzip': '.gz',
+            'video/mp4': '.mp4',
+            'video/webm': '.webm',
+            'audio/mpeg': '.mp3',
+            'audio/wav': '.wav',
             'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '.xlsx',
           };
           const ext = safeFilename.includes('.') ? '' : (mimeToExt[mimeType] ?? '');
-          const resolvedOssConfig = ossConfigRaw ? (() => {
-            try { return JSON.parse(ossConfigRaw) as Record<string, unknown>; } catch { return undefined; }
-          })() : undefined;
+          const resolvedOssConfig = ossConfigRaw
+            ? (() => {
+                try {
+                  return JSON.parse(ossConfigRaw) as Record<string, unknown>;
+                } catch {
+                  return undefined;
+                }
+              })()
+            : undefined;
 
           const config = resolveOssConfig(resolvedOssConfig, process.env, ALLOW_REQUEST_OSS_CONFIG);
           const client = createOssClient(config);
@@ -157,12 +182,18 @@ async function handleUpload(req: IncomingMessage, res: ServerResponse): Promise<
           // 图片类型设置长期缓存，其他类型不强制缓存
           const isImage = (mimeType || '').startsWith('image/');
           const cacheControl = isImage ? 'public, max-age=31536000' : undefined;
-          await uploadObject(client, config, objectKey, buffer, mimeType || 'application/octet-stream', cacheControl);
+          await uploadObject(
+            client,
+            config,
+            objectKey,
+            buffer,
+            mimeType || 'application/octet-stream',
+            cacheControl,
+          );
 
           const fileUrl = toPublicUrl(config, objectKey);
           console.log(`[gpt-vis-ssr] File uploaded: ${fileUrl}`);
-
-          sendJson(res, 200, { success: true, resultObj: fileUrl, objectKey });
+          sendJson(res, 200, { success: true, resultObj: `<oss>${fileUrl}</oss>`, objectKey });
           resolve();
         } catch (err) {
           reject(err);
@@ -200,7 +231,14 @@ async function handleRender(req: IncomingMessage, res: ServerResponse): Promise<
     const objectKey = `${normalizePrefix(config.objectPrefix)}${datePath}/${randomUUID()}.png`;
 
     try {
-      await uploadObject(client, config, objectKey, buffer, 'image/png', 'public, max-age=31536000');
+      await uploadObject(
+        client,
+        config,
+        objectKey,
+        buffer,
+        'image/png',
+        'public, max-age=31536000',
+      );
     } catch (ossErr: unknown) {
       logError('OSS upload failed:', ossErr, {
         objectKey,
@@ -219,6 +257,9 @@ async function handleRender(req: IncomingMessage, res: ServerResponse): Promise<
       objectKey,
       source: source || 'custom-server',
     });
+  } catch (err) {
+    console.error('[gpt-vis-ssr] handleRender failed, chartOptions:', JSON.stringify(chartOptions));
+    throw err;
   } finally {
     vis?.destroy();
   }
@@ -240,7 +281,10 @@ const server = createServer(async (req, res) => {
     const timer = setTimeout(() => {
       timedOut = true;
       logError('Upload request timed out after', REQUEST_TIMEOUT, { url: req.url });
-      sendJson(res, 504, { success: false, errorMessage: `Request timed out after ${REQUEST_TIMEOUT}ms` });
+      sendJson(res, 504, {
+        success: false,
+        errorMessage: `Request timed out after ${REQUEST_TIMEOUT}ms`,
+      });
     }, REQUEST_TIMEOUT);
 
     try {
@@ -270,7 +314,10 @@ const server = createServer(async (req, res) => {
     const timer = setTimeout(() => {
       timedOut = true;
       logError('Request timed out after', REQUEST_TIMEOUT, { url: req.url });
-      sendJson(res, 504, { success: false, errorMessage: `Request timed out after ${REQUEST_TIMEOUT}ms` });
+      sendJson(res, 504, {
+        success: false,
+        errorMessage: `Request timed out after ${REQUEST_TIMEOUT}ms`,
+      });
     }, REQUEST_TIMEOUT);
 
     try {
@@ -294,7 +341,9 @@ server.listen(PORT, () => {
   console.log(`[gpt-vis-ssr] OSS server listening on http://localhost:${PORT}`);
   console.log('[gpt-vis-ssr] POST /api/gpt-vis, POST /api/upload and GET /health are available.');
   if (!ALLOW_REQUEST_OSS_CONFIG) {
-    console.log('[gpt-vis-ssr] Request-level ossConfig is disabled. Set ALLOW_REQUEST_OSS_CONFIG=true to enable it.');
+    console.log(
+      '[gpt-vis-ssr] Request-level ossConfig is disabled. Set ALLOW_REQUEST_OSS_CONFIG=true to enable it.',
+    );
   }
 });
 
